@@ -1,0 +1,68 @@
+name: Build KALQO Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout source archive
+        uses: actions/checkout@v4
+
+      - name: Extract KALQO Flutter source
+        run: |
+          test -s KALQO_Phone_Source.zip
+          unzip -oq KALQO_Phone_Source.zip -d .
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          test -f tool/prepare_android.py
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform
+        run: flutter create --platforms=android --org com.axreon --project-name kalqo .
+
+      - name: Configure native KALQO Android files
+        run: python3 tool/prepare_android.py
+
+      - name: Fetch Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter code
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run finance tests
+        run: flutter test
+
+      - name: Compile installable Android APK
+        run: flutter build apk --debug
+
+      - name: Verify output APK
+        run: |
+          test -s build/app/outputs/flutter-apk/app-debug.apk
+          sha256sum build/app/outputs/flutter-apk/app-debug.apk
+
+      - name: Attach APK for Samsung download
+        uses: actions/upload-artifact@v4
+        with:
+          name: KALQO-Samsung-APK
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
